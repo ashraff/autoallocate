@@ -337,9 +337,9 @@
         {
             var allocationSheet = package.Workbook.Worksheets.Add("Allocation");
 
-            allocationSheet.Column(1).Width = 12;
+            allocationSheet.Column(1).Width = 20;
             allocationSheet.Column(1).Style.Font.Size = 8;
-            allocationSheet.Column(2).Width = 12;
+            allocationSheet.Column(2).Width = 20;
             allocationSheet.Column(2).Style.Font.Size = 8;
             allocationSheet.Column(3).Width = 12;
             allocationSheet.Column(3).Style.Font.Size = 8;
@@ -358,21 +358,22 @@
             allocationSheet.Cells[1, 4, 2, 4].Merge = true;
 
             int cellCount = 5;
-            while (DateTime.Compare(StartDate, EndDate) <= 0)
+            DateTime tempStartDate = StartDate;
+            while (DateTime.Compare(tempStartDate, EndDate) <= 0)
             {
-                if (StartDate.DayOfWeek != DayOfWeek.Saturday && StartDate.DayOfWeek != DayOfWeek.Sunday)
+                if (tempStartDate.DayOfWeek != DayOfWeek.Saturday && tempStartDate.DayOfWeek != DayOfWeek.Sunday)
                 {
-                    allocationSheet.Cells[1, cellCount].Value = StartDate.ToString("dd-MMM");
+                    allocationSheet.Cells[1, cellCount].Value = tempStartDate.ToString("dd-MMM");
 
                     allocationSheet.Cells[1, cellCount].Style.Font.Size = 8;
-                    allocationSheet.Cells[2, cellCount].Value = StartDate.ToString("ddd");
+                    allocationSheet.Cells[2, cellCount].Value = tempStartDate.ToString("ddd");
                     allocationSheet.Cells[2, cellCount].Style.Font.Size = 8;
                     allocationSheet.Cells[2, cellCount].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
                     allocationSheet.Column(cellCount).Width = 4.80;
                     cellCount++;
 
                 }
-                StartDate = StartDate.AddDays(1);
+                tempStartDate = tempStartDate.AddDays(1);
             }
 
             allocationSheet.Cells[1, cellCount].Value = "Allocated";
@@ -412,28 +413,41 @@
                         for (int i = 0; i < res.AvailableStartDate.Length; i++)
                         {
                             totalAvailability += BusinessDaysUntil(res.AvailableStartDate[i], res.AvailableEndDate[i]);
-                            DateTime actualAvailableStartDate = res.AvailableStartDate[i];
-                            while (actualAvailableStartDate != DateTime.MinValue && actualAvailableStartDate <= resource.AvailableStartDate[i])
-                            {
-                                if (!resource.AllocationMap.ContainsKey(actualAvailableStartDate))
-                                {
-                                    var unAllocatedCells = (from cell in allocationSheet.Cells["A:IZ"]
-                                                            where cell.Text.Equals(actualAvailableStartDate.ToString("dd-MMM"))
-                                                            select cell);
-                                    foreach (var cell in unAllocatedCells)
-                                    {
-                                        allocationSheet.Cells[rowCount, cell.Start.Column].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.MediumGray;
-                                        allocationSheet.Cells[rowCount, cell.Start.Column].Style.Fill.BackgroundColor.SetColor(color);
 
-                                    }
-                                }
-                                actualAvailableStartDate = AddWorkDays(actualAvailableStartDate, 1);
-
-                            }
                         }
                         allocationSheet.Cells[rowCount, 4].Value = totalAvailability;
 
                     }
+                    tempStartDate = StartDate;
+                    while (tempStartDate <= EndDate)
+                    {
+                        bool isUnavailable = false;
+                        for (int i = 0; i < res.AvailableStartDate.Length; i++)
+                        {
+                            if (tempStartDate.CompareTo(res.AvailableStartDate[i]) < 0)
+                            {
+                                isUnavailable = true;
+                                break;
+                            }
+
+                        }
+
+                        if (isUnavailable && !resource.AllocationMap.ContainsKey(tempStartDate))
+                        {
+                            var unAllocatedCells = (from cell in allocationSheet.Cells["A:IZ"]
+                                                    where cell.Text.Equals(tempStartDate.ToString("dd-MMM"))
+                                                    select cell);
+                            foreach (var cell in unAllocatedCells)
+                            {
+                                allocationSheet.Cells[rowCount, cell.Start.Column].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.LightTrellis;
+                                allocationSheet.Cells[rowCount, cell.Start.Column].Style.Fill.BackgroundColor.SetColor(Color.Black);
+
+                            }
+                        }
+                        tempStartDate = AddWorkDays(tempStartDate, 1);
+
+                    }
+
                     float allocationDayCount = 0;
                     foreach (KeyValuePair<DateTime, float> kvp in resource.AllocationMap)
                     {
@@ -455,10 +469,36 @@
 
                     rowCount++;
                 }
+                if (rowCount == startRowCount)
+                {
+                    allocationSheet.Cells[rowCount, 2].Value = "UNABLE TO ALLOCATED";
+                    rowCount++;
+                }
                 if (rowCount > startRowCount)
                 {
                     allocationSheet.Cells[startRowCount, 1, rowCount - 1, 1].Merge = true;
                     allocationSheet.Cells[startRowCount, 1, rowCount - 1, 1].Style.VerticalAlignment = OfficeOpenXml.Style.ExcelVerticalAlignment.Center;
+                }
+
+            }
+
+            foreach (Resource resource in resourceList)
+            {
+                Resource selectedRes = allocationList.SelectMany(a => a.resourceList).Where(b => b.Name.Equals(resource.Name)).FirstOrDefault();
+                if (selectedRes == null)
+                {
+                    allocationSheet.Cells[rowCount, 2].Value = resource.Name;
+                    allocationSheet.Cells[rowCount, 3].Value = resource.Type;
+                    int totalAvailability = 0;
+                    for (int i = 0; i < resource.AvailableStartDate.Length; i++)
+                    {
+                        totalAvailability += BusinessDaysUntil(resource.AvailableStartDate[i], resource.AvailableEndDate[i]);
+
+                    }
+                    allocationSheet.Cells[rowCount, 4].Value = totalAvailability;
+                    allocationSheet.Cells[rowCount, cellCount].Value = 0;
+                    allocationSheet.Cells[rowCount, cellCount + 1].Value = totalAvailability;
+                    rowCount++;
                 }
 
             }
