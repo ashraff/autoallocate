@@ -37,65 +37,74 @@
                     requirementList = requirementList.OrderBy(req => req.Priority).ToList();
                     requirementList = UpdateRequriment(requirementList);
 
-                    /* Find Which Requirement has Longest Allocation and use it for first allocation Date */
-                    int longestPole = (from x in requirementList select x.LongPoleByType.Aggregate((l, r) => l.Value > r.Value ? l : r)).Max(a => a.Value);
-
                     DateTime StartDate, EndDate;
 
                     FindStartAndEndDate(resourceList, out StartDate, out EndDate);
                     Console.WriteLine("The Allocation StartDate={0} and EndDate={1}", StartDate, EndDate);
 
                     List<Allocation> allocationList = new List<Allocation>();
-                    Dictionary<DateTime, int> AllocationCountMap = new Dictionary<DateTime, int>();
 
-                    /* Try to allocate within longPole and keep incrementing until you find and efficient allocation.*/
-                    int daysUntil = BusinessDaysUntil(StartDate, EndDate);
-                    DateTime newEndDate = AddWorkDays(StartDate, longestPole);
-
-                    for (int i = longestPole; i <= daysUntil; i++)
+                    string[] constraints = new string[] { "MD", "MR" };
+                    List<Allocation> betterAllocationList = new List<Allocation>();
+                    for (int constCount = 0; constCount < constraints.Length; constCount++)
                     {
-                        /* Clone the Requirement List and Resource List */
-                        List<Resource> originalResourceList = (List<Resource>)FromBinary(ToBinary(resourceList));
-                        List<Requirement> originalRequirementList = (List<Requirement>)FromBinary(ToBinary(requirementList));
+                        Dictionary<DateTime, int> AllocationCountMap = new Dictionary<DateTime, int>();
 
-                        /* Update the Resource End Date to Match the New End Date Calculated. */
-                        originalResourceList = UpdateResourceEndDate(originalResourceList, newEndDate, i);
+                        /* Find Which Requirement has Longest Allocation and use it for first allocation Date */
+                        int longestPole = (from x in requirementList select x.LongPoleByType.Aggregate((l, r) => l.Value > r.Value ? l : r)).Max(a => a.Value);
 
-                        /* Allocate Resource Now */
-                        allocationList = AutoAllocateResource(originalResourceList, originalRequirementList, StartDate, newEndDate);
-                        if (allocationList.Count(a => a.Allocated) == allocationList.Count)
+                        /* Try to allocate within longPole and keep incrementing until you find and efficient allocation.*/
+                        int daysUntil = BusinessDaysUntil(StartDate, EndDate);
+                        DateTime newEndDate = AddWorkDays(StartDate, longestPole);
+
+                        for (int i = longestPole; i <= daysUntil; i++)
                         {
-                            /*All are allocated with least possible resource and date.*/
-                            break;
-                        }
-                        else if (newEndDate.CompareTo(EndDate) <= 0)
-                        {
-                            /* May not be a efficient allocation ,so lets keep count of which date has what allocation count */
-                            AllocationCountMap.Add(newEndDate, allocationList.Count(a => a.Allocated));
-                            newEndDate = AddWorkDays(newEndDate, 1);
-                        }
-                        else if (newEndDate.CompareTo(EndDate) > 0)
-                        {
-                            /* Didnt find efficient allocation, so find a least date which has more allocation and use it as new date and return to the user */
-                            DateTime newEndDate1 = AllocationCountMap.Where(a => a.Value == AllocationCountMap.Values.Max()).OrderBy(a => a.Key).First().Key;
+                            /* Clone the Requirement List and Resource List */
+                            List<Resource> originalResourceList = (List<Resource>)FromBinary(ToBinary(resourceList));
+                            List<Requirement> originalRequirementList = (List<Requirement>)FromBinary(ToBinary(requirementList));
 
-                            /* Clone the Requirement List and Resource List Again.*/
-                            originalResourceList = (List<Resource>)FromBinary(ToBinary(resourceList));
-                            originalRequirementList = (List<Requirement>)FromBinary(ToBinary(requirementList));
+                            /* Update the Resource End Date to Match the New End Date Calculated. */
+                            originalResourceList = UpdateResourceEndDate(originalResourceList, newEndDate, i);
 
-                            originalResourceList = UpdateResourceEndDate(originalResourceList, newEndDate1, daysUntil);
-                            allocationList = AutoAllocateResource(originalResourceList, originalRequirementList, StartDate, newEndDate);
-                            break;
+                            /* Allocate Resource Now */
+                            allocationList = AutoAllocateResource(originalResourceList, originalRequirementList, StartDate, newEndDate, constraints[constCount]);
+                            if (allocationList.Count(a => a.Allocated) == allocationList.Count)
+                            {
+                                /*All are allocated with least possible date.*/
+                                break;
+                            }
+                            else if (newEndDate.CompareTo(EndDate) <= 0)
+                            {
+                                /* May not be a efficient allocation ,so lets keep count of which date has what allocation count */
+                                AllocationCountMap.Add(newEndDate, allocationList.Count(a => a.Allocated));
+                                newEndDate = AddWorkDays(newEndDate, 1);
+                            }
+                            else if (newEndDate.CompareTo(EndDate) > 0)
+                            {
+                                /* Didnt find efficient allocation, so find a least date which has more allocation and use it as new date and return to the user */
+                                DateTime newEndDate1 = AllocationCountMap.Where(a => a.Value == AllocationCountMap.Values.Max()).OrderBy(a => a.Key).First().Key;
+
+                                /* Clone the Requirement List and Resource List Again.*/
+                                originalResourceList = (List<Resource>)FromBinary(ToBinary(resourceList));
+                                originalRequirementList = (List<Requirement>)FromBinary(ToBinary(requirementList));
+
+                                originalResourceList = UpdateResourceEndDate(originalResourceList, newEndDate1, daysUntil);
+                                allocationList = AutoAllocateResource(originalResourceList, originalRequirementList, StartDate, newEndDate, constraints[constCount]);
+                                break;
+                            }
+                            Console.WriteLine("Iteration {0} Allocated {1} requirement for Date {2}", (i - longestPole), AllocationCountMap.Values.Max(), newEndDate.ToShortDateString());
                         }
-                        Console.WriteLine("Iteration {0} Allocated {1} requirement for Date {2}", (i - longestPole), AllocationCountMap.Values.Max(), newEndDate.ToShortDateString());
+                        if (betterAllocationList.Count(a => a.Allocated) < allocationList.Count(a => a.Allocated))
+                            betterAllocationList = (List<Allocation>)FromBinary(ToBinary(allocationList));
+                        /* Print the Allocation Sheet */
+                        foreach (Allocation alloc in allocationList)
+                        {
+                            Console.WriteLine(alloc.ToString());
+                        }
                     }
-                    /* Print the Allocation Sheet */
-                    foreach (Allocation alloc in allocationList)
-                    {
-                        Console.WriteLine(alloc.ToString());
-                    }
+
                     /* Now we have the data, Create the Allocation sheet */
-                    CreateAllocationWorkSheet(package, StartDate, EndDate, allocationList, resourceList);
+                    CreateAllocationWorkSheet(package, StartDate, EndDate, betterAllocationList, resourceList);
 
                     package.Save();
                 }
@@ -130,7 +139,7 @@
             return newDate;
         }
 
-        private static List<Allocation> AutoAllocateResource(List<Resource> availableResourceList, List<Requirement> requirementList, DateTime StartDate, DateTime EndDate)
+        private static List<Allocation> AutoAllocateResource(List<Resource> availableResourceList, List<Requirement> requirementList, DateTime StartDate, DateTime EndDate, string constraint)
         {
             /* This is the heart of the allocation program. It tries to allocate the resource against a requriement from the start state within the resource available end date efficiently. */
             List<Allocation> allocationList = new List<Allocation>();
@@ -141,6 +150,10 @@
                 /* Loop through each of the Requirement */
                 foreach (Requirement requirement in requirementList)
                 {
+                    if (requirement.Name.Contains("CR737"))
+                    {
+                        Console.WriteLine(requirement.Name);
+                    }
                     /* Find any dependent requirement for the current requirement. The expectation is requirements are incrementally dependent in the Requirement Sheet.*/
                     Allocation dependentRequirement = (from n in allocationList where n.requirement.Id == requirement.DependsOnId select n).FirstOrDefault();
 
@@ -150,123 +163,130 @@
                         /* If the current requiement is not allocated already then proceed*/
                         if (allocationList.Where(a => a.requirement.Name.Equals(requirement.Name)).Count() == 0)
                         {
-
                             Allocation allocation = new Allocation();
-                            allocation.AllocationStartDate = StartDate;
-                            allocation.AllocationEndDate = EndDate;
-                            allocation.requirement = requirement;
-                            allocation.AllocationByType = (Dictionary<string, int>)FromBinary(ToBinary(requirement.EffortByType));
                             List<Resource> originalResourceList = (List<Resource>)FromBinary(ToBinary(availableResourceList));
-
-                            /* For the current requirement, loop through the effort by each of teh resource, we have to allocate one resource type at a time. */
-                            foreach (KeyValuePair<string, int> kvp in requirement.EffortByType)
+                            DateTime tempStartDateOut = StartDate;
+                            do
                             {
-                                /* find maximum resources need for a type */
-                                int maximumResource = requirement.MaximimResourcesByType[kvp.Key];
-                                /* find the long pole for a type */
-                                int longPole = requirement.LongPoleByType[kvp.Key];
-                                /* Counter for retry logic, we are skipping resource if earlist one is available or if the resource is already allocated for same requirement due to efficiency reason. This retry will ensure we have tried fare amount of time */
-                                int UnableToAllocate = 0;
-                                /* Flag to skip the resource if the resource is already alloacted for the same requirement,till other resource are tried */
-                                int AllocationTry = 1;
+                                allocation = new Allocation();
+                                availableResourceList = (List<Resource>)FromBinary(ToBinary(originalResourceList));
+                                allocation.AllocationStartDate = tempStartDateOut;
+                                allocation.AllocationEndDate = EndDate;
+                                allocation.requirement = requirement;
+                                allocation.AllocationByType = (Dictionary<string, int>)FromBinary(ToBinary(requirement.EffortByType));
 
-                                /* Till maximum resource for a allocation by type is reached and the requirement need allocation for the type and retry count didnt reach  N^2 count*/
-                                while (allocation.resourceList.Where(a => a.Type.Equals(kvp.Key)).GroupBy(b => b.Name).Count() < maximumResource && allocation.AllocationByType[kvp.Key] > 0 && UnableToAllocate++ < (availableResourceList.Count * availableResourceList.Count))
+                                /* For the current requirement, loop through the effort by each of teh resource, we have to allocate one resource type at a time. */
+                                foreach (KeyValuePair<string, int> kvp in requirement.EffortByType)
                                 {
-                                    /* Loop through all the resource */
-                                    foreach (Resource resource in availableResourceList)
+                                    /* find maximum resources need for a type */
+                                    int maximumResource = requirement.MaximimResourcesByType[kvp.Key];
+                                    /* find the long pole for a type */
+                                    int longPole = requirement.LongPoleByType[kvp.Key];
+                                    /* Counter for retry logic, we are skipping resource if earlist one is available or if the resource is already allocated for same requirement due to efficiency reason. This retry will ensure we have tried fare amount of time */
+                                    int UnableToAllocate = 0;
+                                    /* Flag to skip the resource if the resource is already alloacted for the same requirement,till other resource are tried */
+                                    int AllocationTry = 1;
+
+                                    /* Till maximum resource for a allocation by type is reached and the requirement need allocation for the type and retry count didnt reach  N^2 count*/
+                                    while (allocation.resourceList.Where(a => a.Type.Equals(kvp.Key)).GroupBy(b => b.Name).Count() < maximumResource && allocation.AllocationByType[kvp.Key] > 0 && UnableToAllocate++ < (availableResourceList.Count * availableResourceList.Count))
                                     {
-                                        /* if the resource type is same the required allocation type */
-                                        if (kvp.Key.Equals(resource.Type))
+                                        /* Loop through all the resource */
+                                        foreach (Resource resource in availableResourceList)
                                         {
-                                            /* Loop through the Available Dates*/
-                                            for (int i = 0; i < resource.AvailableStartDate.Length; i++)
+                                            /* if the resource type is same the required allocation type */
+                                            if (kvp.Key.Equals(resource.Type))
                                             {
-                                                /* Compute new Start if we have a dependent which the current one depends on, this to ensure that this allocation start after it */
-                                                DateTime tempStartDate = (dependentRequirement != null && IsBetween(dependentRequirement.AllocationEndDate, resource.AvailableStartDate[i], resource.AvailableEndDate[i])) ? dependentRequirement.AllocationEndDate : resource.AvailableStartDate[i];
-
-                                                /* We are loopiong through several available ranges, if one of them is allocated, wwe use this flag to break out of the loop.*/
-                                                bool isAllocatedInParticularDateRange = false;
-
-                                                /* If we have free days for a resource. Intially longPole will be the longest day needed for the requriement. */
-                                                if (longPole > 0 && BusinessDaysUntil(tempStartDate, resource.AvailableEndDate[i]) >= longPole)
+                                                /* Loop through the Available Dates*/
+                                                for (int i = 0; i < resource.AvailableStartDate.Length; i++)
                                                 {
-                                                    /* Skip the loop,of the resource is previously allocated for same requirement */
-                                                    if (allocation.resourceList.Where(a => a.Type.Equals(kvp.Key) && a.Name.Equals(resource.Name) && a.AllocationTry == AllocationTry).Count() == 1)
-                                                    {
-                                                        continue;
-                                                    }
-                                                    /* This for evaulating resource dependency, if the current resource by type is depedent on same or other type and the other type is not within the dep.Days no of the days as mentioned in the requirement sheet, then allocation is not possible*/
-                                                    if (allocation.resourceList.Count > 0)
-                                                    {
-                                                        Dependency dep = requirement.DependencyList.Where(a => a.Depender.Equals(allocation.resourceList.Last().Type) && a.Dependent.Equals(resource.Type)).FirstOrDefault();
-                                                        if (dep != null && dep.Days != -1)
-                                                        {
-                                                            DateTime lastResourceStartDate = allocation.resourceList.Last().AllocationMap.First().Key;
-                                                            DateTime dependentDate = AddWorkDays(lastResourceStartDate, dep.Days);
-                                                            if (tempStartDate.CompareTo(dependentDate) > 0) continue;
-                                                        }
-                                                    }
-                                                    /* Get all other resoure in after the current resource */
-                                                    List<Resource> pendingList = availableResourceList.GetRange(availableResourceList.IndexOf(resource) + 1, availableResourceList.Count - availableResourceList.IndexOf(resource) - 1);
+                                                    /* Compute new Start if we have a dependent which the current one depends on, this to ensure that this allocation start after it */
+                                                    DateTime tempStartDate = (dependentRequirement != null && IsBetween(dependentRequirement.AllocationEndDate, resource.AvailableStartDate[i], resource.AvailableEndDate[i])) ? dependentRequirement.AllocationEndDate : resource.AvailableStartDate[i];
 
-                                                    /* If there is no dependent requirement or if the  end of the requirement it depends on is between resource available date , then allocation is possible. */
-                                                    if (dependentRequirement == null || IsBetween(dependentRequirement.AllocationEndDate, resource.AvailableStartDate[i], resource.AvailableEndDate[i]) || resource.AvailableStartDate[i].CompareTo(dependentRequirement.AllocationEndDate) >= 0)
+                                                    /* We are loopiong through several available ranges, if one of them is allocated, wwe use this flag to break out of the loop.*/
+                                                    bool isAllocatedInParticularDateRange = false;
+
+                                                    /* If we have free days for a resource. Intially longPole will be the longest day needed for the requriement. */
+                                                    if (longPole > 0 && BusinessDaysUntil(tempStartDate, resource.AvailableEndDate[i]) >= longPole)
                                                     {
-                                                        /* Skip if other resource available with earlier available date */
-                                                        if (pendingList.Where(a => a.AvailableStartDate[i].CompareTo(tempStartDate) < 0 && a.Type.Equals(kvp.Key)).Count() > 0)
+                                                        /* Skip the loop,of the resource is previously allocated for same requirement */
+                                                        if (allocation.resourceList.Where(a => a.Type.Equals(kvp.Key) && a.Name.Equals(resource.Name) && a.AllocationTry == AllocationTry).Count() == 1)
                                                         {
                                                             continue;
                                                         }
-                                                        /* Find if the same resource is used for allocation */
-                                                        Resource availableResource = allocation.resourceList.Where(a => a.Name.Equals(resource.Name)).FirstOrDefault();
-
-                                                        /* Create a New Resource */
-                                                        if (availableResource == null)
+                                                        /* This for evaulating resource dependency, if the current resource by type is depedent on same or other type and the other type is not within the dep.Days no of the days as mentioned in the requirement sheet, then allocation is not possible*/
+                                                        if (allocation.resourceList.Count > 0)
                                                         {
-                                                            availableResource = new Resource();
-                                                            availableResource.AvailableStartDate = new DateTime[resource.AvailableStartDate.Length];
-                                                            availableResource.AvailableEndDate = new DateTime[resource.AvailableStartDate.Length];
-                                                            availableResource.Percentage = new float[resource.AvailableStartDate.Length];
-                                                            allocation.resourceList.Add(availableResource);
-                                                            availableResource.AllocationTry = AllocationTry;
+                                                            Dependency dep = requirement.DependencyList.Where(a => a.Depender.Equals(allocation.resourceList.Last().Type) && a.Dependent.Equals(resource.Type)).FirstOrDefault();
+                                                            if (dep != null && dep.Days != -1)
+                                                            {
+                                                                DateTime lastResourceStartDate = allocation.resourceList.Last().AllocationMap.First().Key;
+                                                                DateTime dependentDate = AddWorkDays(lastResourceStartDate, dep.Days);
+                                                                if (tempStartDate.CompareTo(dependentDate) > 0 || tempStartDate.CompareTo(lastResourceStartDate) < 0) continue;
+                                                            }
                                                         }
-                                                        availableResource.Name = resource.Name;
-                                                        availableResource.Type = kvp.Key;
-                                                        availableResource.AvailableStartDate[i] = tempStartDate;
-                                                        availableResource.AvailableEndDate[i] = AddWorkDays(tempStartDate, longPole);
+                                                        /* Get all other resoure in after the current resource */
+                                                        List<Resource> pendingList = availableResourceList.GetRange(availableResourceList.IndexOf(resource) + 1, availableResourceList.Count - availableResourceList.IndexOf(resource) - 1);
 
-                                                        /* Reduce the allocation by type ,else is not possble at all,just in case*/
-                                                        if (allocation.AllocationByType[kvp.Key] >= longPole)
-                                                            allocation.AllocationByType[kvp.Key] = Convert.ToInt32(allocation.AllocationByType[kvp.Key] - (longPole * resource.Percentage[i]));
-                                                        else allocation.AllocationByType[kvp.Key] = Convert.ToInt32((longPole * resource.Percentage[i]) - allocation.AllocationByType[kvp.Key]);
-
-                                                        /* Reduce the longPole , which will be teh remainign allocation */
-                                                        if (longPole > allocation.AllocationByType[kvp.Key]) longPole = allocation.AllocationByType[kvp.Key];
-
-                                                        /* Set teh start date of the resource to the end date of current allocation */
-                                                        resource.AvailableStartDate[i] = availableResource.AvailableEndDate[i];
-
-                                                        /*Mark the allocation with a map, used to fill teh excel sheet */
-                                                        DateTime tempDate = tempStartDate;
-                                                        while (DateTime.Compare(tempDate, availableResource.AvailableEndDate[i]) != 0)
+                                                        /* If there is no dependent requirement or if the  end of the requirement it depends on is between resource available date , then allocation is possible. */
+                                                        if (dependentRequirement == null || IsBetween(dependentRequirement.AllocationEndDate, resource.AvailableStartDate[i], resource.AvailableEndDate[i]) || resource.AvailableStartDate[i].CompareTo(dependentRequirement.AllocationEndDate) >= 0)
                                                         {
-                                                            availableResource.AllocationMap.Add(tempDate, resource.Percentage[i]);
-                                                            tempDate = tempDate.AddDays(1);
-                                                        }
+                                                            /* Skip if other resource available with earlier available date */
+                                                            if (pendingList.Where(a => a.AvailableStartDate[i].CompareTo(tempStartDate) < 0 && a.Type.Equals(kvp.Key)).Count() > 0 && constraint.Equals("MD"))
+                                                            {
+                                                                continue;
+                                                            }
+                                                            /* Find if the same resource is used for allocation */
+                                                            Resource availableResource = allocation.resourceList.Where(a => a.Name.Equals(resource.Name)).FirstOrDefault();
 
-                                                        allocation.AllocationEndDate = tempDate;
-                                                        /* Set the allocation flag to break out of the loop */
-                                                        isAllocatedInParticularDateRange = true;
+                                                            /* Create a New Resource */
+                                                            if (availableResource == null)
+                                                            {
+                                                                availableResource = new Resource();
+                                                                availableResource.AvailableStartDate = new DateTime[resource.AvailableStartDate.Length];
+                                                                availableResource.AvailableEndDate = new DateTime[resource.AvailableStartDate.Length];
+                                                                availableResource.Percentage = new float[resource.AvailableStartDate.Length];
+                                                                allocation.resourceList.Add(availableResource);
+                                                                availableResource.AllocationTry = AllocationTry;
+                                                            }
+                                                            availableResource.Name = resource.Name;
+                                                            availableResource.Type = kvp.Key;
+                                                            availableResource.AvailableStartDate[i] = tempStartDate;
+                                                            availableResource.AvailableEndDate[i] = AddWorkDays(tempStartDate, longPole);
+
+                                                            /* Reduce the allocation by type ,else is not possble at all,just in case*/
+                                                            if (allocation.AllocationByType[kvp.Key] >= longPole)
+                                                                allocation.AllocationByType[kvp.Key] = Convert.ToInt32(allocation.AllocationByType[kvp.Key] - (longPole * resource.Percentage[i]));
+                                                            else allocation.AllocationByType[kvp.Key] = Convert.ToInt32((longPole * resource.Percentage[i]) - allocation.AllocationByType[kvp.Key]);
+
+                                                            /* Reduce the longPole , which will be teh remainign allocation */
+                                                            if (longPole > allocation.AllocationByType[kvp.Key]) longPole = allocation.AllocationByType[kvp.Key];
+
+                                                            /* Set teh start date of the resource to the end date of current allocation */
+                                                            resource.AvailableStartDate[i] = availableResource.AvailableEndDate[i];
+
+                                                            /*Mark the allocation with a map, used to fill teh excel sheet */
+                                                            DateTime tempDate = tempStartDate;
+                                                            while (DateTime.Compare(tempDate, availableResource.AvailableEndDate[i]) != 0)
+                                                            {
+                                                                availableResource.AllocationMap.Add(tempDate, resource.Percentage[i]);
+                                                                tempDate = tempDate.AddDays(1);
+                                                            }
+
+                                                            allocation.AllocationEndDate = tempDate;
+                                                            /* Set the allocation flag to break out of the loop */
+                                                            isAllocatedInParticularDateRange = true;
+                                                        }
                                                     }
+                                                    if (isAllocatedInParticularDateRange) break;
                                                 }
-                                                if (isAllocatedInParticularDateRange) break;
                                             }
                                         }
+                                        AllocationTry += 1;
                                     }
-                                    AllocationTry += 1;
                                 }
+                                tempStartDateOut = AddWorkDays(tempStartDateOut, 1);
                             }
+                            while (tempStartDateOut < EndDate && allocation.AllocationByType.Sum(x => x.Value) > 0);
                             /* After all tries, if we cannot allocate */
                             if (allocation.AllocationByType.Sum(x => x.Value) > 0) { availableResourceList = originalResourceList; allocation.Allocated = false; allocation.resourceList = new List<Resource>(); }
                             else { allocation.Allocated = true; }

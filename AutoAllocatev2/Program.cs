@@ -1,30 +1,28 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-/* To work eith EPPlus library */
-using OfficeOpenXml;
-using OfficeOpenXml.Drawing;
-
-/* For I/O purpose */
-using System.IO;
-
-/* For Diagnostics */
-using System.Diagnostics;
-using System.Data;
-
-using System.Drawing;
-using System.Runtime.Serialization.Formatters.Binary;
-
-namespace AutoAllocatev2
+﻿namespace AutoAllocatev2
 {
+    using System;
+    using System.Collections.Generic;
+    using System.Data;
+    /* For Diagnostics */
+    using System.Diagnostics;
+    using System.Drawing;
+    /* For I/O purpose */
+    using System.IO;
+    using System.Linq;
+    using System.Runtime.Serialization.Formatters.Binary;
+    using System.Text;
+    using System.Threading.Tasks;
+
+    /* To work eith EPPlus library */
+    using OfficeOpenXml;
+    using OfficeOpenXml.Drawing;
+
     class Program
     {
+        #region Methods
 
         static void Main(string[] args)
         {
-
             if (args.Length <= 0 || string.IsNullOrEmpty(args[0]))
             {
                 args = new string[1];
@@ -38,6 +36,7 @@ namespace AutoAllocatev2
             }
             AutoAllocator.Allocate(args[0]);
         }
+
+        #endregion Methods
     }
 }
-
