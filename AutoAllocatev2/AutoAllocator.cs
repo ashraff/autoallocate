@@ -150,10 +150,6 @@
                 /* Loop through each of the Requirement */
                 foreach (Requirement requirement in requirementList)
                 {
-                    if (requirement.Name.Contains("CR737"))
-                    {
-                        Console.WriteLine(requirement.Name);
-                    }
                     /* Find any dependent requirement for the current requirement. The expectation is requirements are incrementally dependent in the Requirement Sheet.*/
                     Allocation dependentRequirement = (from n in allocationList where n.requirement.Id == requirement.DependsOnId select n).FirstOrDefault();
 
@@ -264,7 +260,7 @@
                                                             /* Set teh start date of the resource to the end date of current allocation */
                                                             resource.AvailableStartDate[i] = availableResource.AvailableEndDate[i];
 
-                                                            /*Mark the allocation with a map, used to fill teh excel sheet */
+                                                            /*Mark the allocation with a map, used to fill the excel sheet */
                                                             DateTime tempDate = tempStartDate;
                                                             while (DateTime.Compare(tempDate, availableResource.AvailableEndDate[i]) != 0)
                                                             {
@@ -804,29 +800,6 @@
                 }
             }
             return originalResourceList;
-        }
-
-        private static DataTable WorksheetToDataTable(ExcelWorksheet oSheet)
-        {
-            int totalRows = oSheet.Dimension.End.Row;
-            int totalCols = oSheet.Dimension.End.Column;
-            DataTable dt = new DataTable(oSheet.Name);
-            DataRow dr = null;
-            for (int i = 1; i <= totalRows; i++)
-            {
-                if (i > 1) dr = dt.Rows.Add();
-                for (int j = 1; j <= totalCols; j++)
-                {
-                    if (i == 1)
-                        dt.Columns.Add(oSheet.Cells[i, j].Value.ToString());
-                    else
-                    {
-                        string myString = String.Format("{0}", oSheet.Cells[i, j].Text);
-                        dr[j - 1] = myString;
-                    }
-                }
-            }
-            return dt;
         }
 
         #endregion Methods
